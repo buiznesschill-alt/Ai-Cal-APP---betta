@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import os from "os";
+import fs from "fs/promises";
+import path from "path";
 
 export const runtime = "nodejs";
 
@@ -20,14 +22,22 @@ function getLanIp(): string | null {
   return null;
 }
 
+async function getPublicUrl(): Promise<string | null> {
+  try {
+    const raw = await fs.readFile(path.join(process.cwd(), "data", "tunnel.json"), "utf-8");
+    const j = JSON.parse(raw);
+    if (j?.url && typeof j.updatedAt === "number" && Date.now() - j.updatedAt < 12*60*60*1000) return j.url;
+  } catch {}
+  return null;
+}
+
 export async function GET(req: NextRequest) {
   const host = req.headers.get("host") || "localhost:3002";
-  // https len ak naozaj pride cez proxy s x-forwarded-proto: https – inak http
   const protocol = req.headers.get("x-forwarded-proto") === "https" ? "https" : "http";
   const origin = `${protocol}://${host}`;
   const lanIp = getLanIp();
-  // port berieme z actual requestu, nie hardcoded
-  const port = host.includes(":") ? host.split(":").pop()! : "3002";
-  const lanUrl = lanIp ? `http://${lanIp}:${port}` : origin;
-  return NextResponse.json({ origin, lanIp, lanUrl, host });
+  // iba 3443 https pre LAN (http vypnutý)
+  const lanUrl = lanIp ? `https://${lanIp}:3443` : origin;
+  const publicUrl = await getPublicUrl();
+  return NextResponse.json({ origin, lanIp, lanUrl, host, publicUrl });
 }

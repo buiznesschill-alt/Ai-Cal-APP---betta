@@ -8,28 +8,47 @@ export function QRCodePanel() {
   const [lanUrl, setLanUrl] = useState<string>("");
   const [copied, setCopied] = useState(false);
 
+  const [qrDataUrl, setQrDataUrl] = useState<string>("");
   useEffect(() => {
     const origin = window.location.origin;
     setUrl(origin);
-    // Default to origin, but if origin is localhost/127, use LAN IP fallback immediately
-    const isLocalhost = origin.includes("localhost") || origin.includes("127.0.0.1");
-    const port = window.location.port || "3002";
-    const fallbackLan = `http://192.168.1.14:${port}`;
-    setLanUrl(isLocalhost ? fallbackLan : origin);
-    fetch("/api/info")
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.lanUrl && d.lanUrl.includes("192.168.")) setLanUrl(d.lanUrl);
-        else if (d.lanIp) setLanUrl(`http://${d.lanIp}:${port}`);
-        else if (isLocalhost) setLanUrl(fallbackLan);
-      })
-      .catch(() => {
-        if (isLocalhost) setLanUrl(fallbackLan);
-      });
+    const fallbackLan = "https://192.168.1.14:3443";
+    // iba 3443 https (http vypnutý)
+    setLanUrl(origin.includes("https") ? origin : fallbackLan);
+    const loadInfo = () =>
+      fetch("/api/info")
+        .then((r) => r.json())
+        .then((d) => {
+          if (d.publicUrl) setLanUrl(d.publicUrl);
+          else if (d.lanUrl && d.lanUrl.includes("192.168.")) setLanUrl(d.lanUrl);
+          else if (d.lanIp) setLanUrl(`https://${d.lanIp}:3443`);
+          else if (d.lanUrl) setLanUrl(d.lanUrl);
+        })
+        .catch(() => {});
+    loadInfo();
+    const iv = setInterval(loadInfo, 30000);
+    return () => clearInterval(iv);
   }, []);
 
   const displayUrl = lanUrl || url;
-  const qrSrc = displayUrl ? `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(displayUrl)}&color=1A1C1E&bgcolor=F8F9FA` : "";
+  useEffect(() => {
+    if (!displayUrl) return;
+    let cancelled = false;
+    async function gen() {
+      try {
+        const QRCode = await import("qrcode").then((m) => (m as any).default || m).catch(() => null);
+        if (QRCode && !cancelled) {
+          const dataUrl = await QRCode.toDataURL(displayUrl, { width: 240, margin: 1, color: { dark: "#1A1C1E", light: "#F8F9FA" } });
+          if (!cancelled) setQrDataUrl(dataUrl);
+          return;
+        }
+      } catch {}
+      if (!cancelled) setQrDataUrl(`https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(displayUrl)}&color=1A1C1E&bgcolor=F8F9FA`);
+    }
+    gen();
+    return () => { cancelled = true; };
+  }, [displayUrl]);
+  const qrSrc = qrDataUrl;
 
   async function copy() {
     if (!displayUrl) return;
