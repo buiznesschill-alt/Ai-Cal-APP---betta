@@ -183,12 +183,13 @@ const TEMPERATURE = 0.2;
 const MAX_ATTEMPTS = 2;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const jitter = (ms: number) => ms + Math.floor(Math.random() * 400);
 
-// Jeden fetch s jedným automatickým opakovaním pri 429/503 (transientné limity)
+// FÁZA 0D: backoff 7000→1500+jitter, timeout 90s→25s
 async function fetchWithRetry(url: string, init: RequestInit): Promise<Response> {
   let res = await fetch(url, init);
   if ((res.status === 429 || res.status === 503) && init.body) {
-    await sleep(7000);
+    await sleep(jitter(1500));
     res = await fetch(url, init);
   }
   return res;
@@ -377,6 +378,30 @@ type ChatMessage = { role: "system" | "user" | "assistant"; content: any };
 const CORRECTION_PROMPT = (issues: string) =>
   `Problems found in your previous answer: ${issues}. Re-examine the photo carefully, fix exactly these problems and respond again with ONE valid JSON object matching the schema, nothing else.`;
 
+// FÁZA 1H: lokálny Atwater fix bez 2. AI callu
+function tryLocalFix(parsed: ParsedAnalysis): ParsedAnalysis | null {
+  const r = parsed.result;
+  const atwater = 4 * r.protein + 4 * r.carbs + 9 * r.fat;
+  let fixed: NutritionResult | null = null;
+  const issues = validateResult(r);
+  const onlyAtwater = issues.length === 1 && issues[0].includes("kcal") && issues[0].includes("inconsistent");
+  const atwaterDrift = atwater >= 50 && Math.abs(r.kcal - atwater) / atwater > 0.5;
+  if (onlyAtwater || atwaterDrift) {
+    fixed = { ...r, kcal: Math.round(atwater) };
+    if (!validateResult(fixed).length) return { ...parsed, result: fixed };
+  }
+  // sugar/fiber presah — clamp
+  if (r.sugar > r.carbs + 5 || r.fiber > r.carbs + 5) {
+    fixed = { ...r, sugar: Math.min(r.sugar, r.carbs), fiber: Math.min(r.fiber, r.carbs) };
+    const still = validateResult(fixed);
+    if (!still.length || (still.length === 1 && still[0].includes("kcal"))) {
+      if (fixed.kcal !== Math.round(4*fixed.protein+4*fixed.carbs+9*fixed.fat)) fixed.kcal = Math.round(4*fixed.protein+4*fixed.carbs+9*fixed.fat);
+      if (!validateResult(fixed).length) return { ...parsed, result: fixed };
+    }
+  }
+  return null;
+}
+
 // Up to MAX_ATTEMPTS passes; implausible/inconsistent results get fed back to the
 // model for self-correction. Best usable answer wins.
 async function analyzeWithRetry(
@@ -410,6 +435,9 @@ async function analyzeWithRetry(
     }
     const issues = validateResult(parsed.result);
     if (!issues.length) return parsed;
+    // skús lokálny fix pred 2. AI volaním (ušetrí 2-3s)
+    const local = tryLocalFix(parsed);
+    if (local) return local;
     messages = [
       ...messages,
       { role: "assistant", content: text },
@@ -533,6 +561,13 @@ abstract class VisionProvider implements AIProvider {
     const noFood = p1.result.kcal === 0 && p1.result.protein === 0 && p1.result.carbs === 0 && p1.result.fat === 0;
     if (noFood) return finalizePortions(p1, opts?.note || "", null, null);
 
+    // FÁZA 1E: podmienený 2. pass — vysoká istota + čerstvé jedlo (nie pack) netreba grounding (-2-6s, -70% volaní)
+    const isPackaged = !!p1.eanOnPack || p1.foodForm === "pack" || (p1.result.confidence >= 0.95 && !!p1.retailer);
+    if (p1.result.confidence >= 0.88 && !isPackaged) {
+      // fresh dish s vysokou istotou — preskoč DB vyhľadávanie
+      return finalizePortions(p1, opts?.note || "", null, null);
+    }
+
     // Fáza B – EAN fast-path: čitateľný čiarový kód z obalu → priamy DB lookup
     let candidates: FoodCandidate[] | null = null;
     if (p1.eanOnPack && isValidGTIN(p1.eanOnPack)) {
@@ -620,25 +655,39 @@ class OpenRouterProvider extends VisionProvider {
 
   protected async send(messages: ChatMessage[]): Promise<string> {
     const apiKey = process.env.OPENROUTER_API_KEY!;
-    const res = await fetchWithRetry("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: OPENROUTER_MODEL,
-        max_tokens: 2048,
-        temperature: TEMPERATURE,
-        response_format: { type: "json_object" },
-        messages,
-      }),
-      signal: AbortSignal.timeout(90_000),
-    });
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      throw new Error(`OpenRouter API error ${res.status}: ${body.slice(0, 300)}`);
+    // FÁZA 2J: fast lane — skús rýchly model (gemini-flash) s 8s timeout, fallback na minimax
+    const fastModel = process.env.OPENROUTER_FAST_MODEL || "google/gemini-flash-1.5-8b:free";
+    const tryModels = [fastModel, OPENROUTER_MODEL].filter((v, i, a) => v && a.indexOf(v) === i);
+    let lastErr: any = null;
+    for (const model of tryModels) {
+      try {
+        const res = await fetchWithRetry("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model,
+            max_tokens: 1536,
+            temperature: TEMPERATURE,
+            response_format: { type: "json_object" },
+            messages,
+          }),
+          signal: AbortSignal.timeout(25_000),
+        });
+        if (!res.ok) {
+          const body = await res.text().catch(() => "");
+          throw new Error(`OpenRouter API error ${res.status}: ${body.slice(0, 300)}`);
+        }
+        const json: any = await res.json();
+        if (json.error) throw new Error(`OpenRouter error: ${JSON.stringify(json.error).slice(0, 300)}`);
+        return json.choices?.[0]?.message?.content ?? "";
+      } catch (e) {
+        lastErr = e;
+        // pri chybách fast modelu skús pomalý
+        if (model === fastModel) continue;
+        throw e;
+      }
     }
-    const json: any = await res.json();
-    if (json.error) throw new Error(`OpenRouter error: ${JSON.stringify(json.error).slice(0, 300)}`);
-    return json.choices?.[0]?.message?.content ?? "";
+    throw lastErr || new Error("OpenRouter failed");
   }
 }
 

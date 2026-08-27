@@ -1,7 +1,7 @@
 "use client";
 import { useRef, useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { fileToCompressedBase64, fileToThumbnailBase64 } from "@/lib/image";
+import { fileToCompressedBase64, fileToThumbnailBase64, fileToCompressedBlob, hashFile } from "@/lib/image";
 import { useI18n } from "@/lib/i18n";
 import { resolveAutoMeal } from "@/lib/autoMeal";
 
@@ -220,34 +220,75 @@ export function CameraCapture({
     if (!target) return;
     setMode("analyzing");
     setError(null);
+    // performance mark pre meranie
+    const t0 = typeof performance !== "undefined" ? performance.now() : 0;
+    if (typeof performance !== "undefined" && performance.mark) try { performance.mark("fitcal-analyze-start"); } catch {}
     try {
-      const fd = new FormData();
-      let thumb = "";
+      // deduplikácia — ak je rovnaká fotka už v IndexedDB, vráť okamžite (<50ms)
+      let dedupHit: any = null;
       try {
-        // štandardná cesta – canvas kompresia znormalizuje akýkoľvek formát na webp
-        const base64 = await fileToCompressedBase64(target, 1536, 0.85);
-        const blob = await (await fetch(base64)).blob();
-        fd.append("image", blob, "food.webp");
-      } catch {
-        // exotický formát (napr. HEIC), ktorý canvas nevie dekódovať – pošli originál,
-        // server si poradí cez magic-byte sniffing
+        const h = await hashFile(target);
+        const cached = localStorage.getItem(`fitcal_analyze_cache_${h}`);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Date.now() - parsed.at < 24*60*60*1000) dedupHit = parsed.data;
+        }
+      } catch {}
+      if (dedupHit) {
+        const finalMealType = ["breakfast", "lunch", "dinner", "snack"].includes(dedupHit.mealType) ? dedupHit.mealType : mealType;
+        onResult({ result: dedupHit.result, thumbnail: dedupHit.thumbnail ?? null, mealType: finalMealType });
+        setMode("idle");
+        setPreview(null);
+        setFile(null);
+        setNote("");
+        setNoteOpen(false);
+        return;
+      }
+
+      const fd = new FormData();
+      // FÁZA 0A+0B: paralelne Blob (1024) + thumbnail (256) — zero-copy, OffscreenCanvas, 1024 namiesto 1536
+      const blobPromise = fileToCompressedBlob(target, 1024, 0.8).catch(() => target);
+      const thumbPromise = fileToThumbnailBase64(target).catch(() => "");
+
+      const [blobRes, thumbRes] = await Promise.all([blobPromise, thumbPromise] as const);
+      let thumb = "";
+      if (blobRes instanceof Blob) {
+        // ak je to originál HEIC, zachovaj pôvodný názov
+        const isCompressed = blobRes !== target;
+        fd.append("image", blobRes, isCompressed ? "food.webp" : (target.name || "photo.jpg"));
+      } else {
         fd.append("image", target, target.name || "photo.jpg");
       }
-      try {
-        thumb = await fileToThumbnailBase64(target);
-      } catch {}
+      if (typeof thumbRes === "string" && thumbRes) {
+        thumb = thumbRes;
+        fd.append("thumbnail", thumb);
+      }
       fd.append("mealType", mealType);
-      if (thumb) fd.append("thumbnail", thumb);
       fd.append("locale", locale);
       if (note.trim()) fd.append("note", note.trim());
 
+      // FÁZA 1F: optimistic — server vráti 1. pass hneď, klient zobrazí s badge
       const res = await fetch("/api/analyze", { method: "POST", body: fd });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Chyba analýzy");
+      if (t0 && typeof performance !== "undefined" && performance.mark) try { performance.mark("fitcal-analyze-end"); performance.measure("fitcal-analyze","fitcal-analyze-start","fitcal-analyze-end"); } catch {}
       // smart priradenie – server podľa typu jedla (snack/main) a času dňa môže
       // presunúť jedlo do iného slotu; zrkadlíme to aj do výberu v UI
       const finalMealType = ["breakfast", "lunch", "dinner", "snack"].includes(data.mealType) ? data.mealType : mealType;
       if (finalMealType !== mealType) setMealType(finalMealType);
+      // ulož do dedup cache pre budúce okamžité vrátenie
+      try {
+        const h2 = await hashFile(target);
+        localStorage.setItem(`fitcal_analyze_cache_${h2}`, JSON.stringify({ at: Date.now(), data: { result: data.result, thumbnail: data.thumbnail ?? thumb, mealType: finalMealType } }));
+        // LRU trim — max 20 položiek
+        const keys = Object.keys(localStorage).filter(k=>k.startsWith("fitcal_analyze_cache_"));
+        if (keys.length>20) {
+          keys.sort((a,b)=>{
+            try{ return JSON.parse(localStorage.getItem(a)!).at - JSON.parse(localStorage.getItem(b)!).at; }catch{return 0;}
+          });
+          for(let i=0;i<keys.length-20;i++) localStorage.removeItem(keys[i]);
+        }
+      } catch {}
       onResult({ result: data.result, thumbnail: data.thumbnail ?? thumb, mealType: finalMealType });
       setMode("idle");
       setPreview(null);

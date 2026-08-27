@@ -4,6 +4,17 @@ import { findUserById } from "@/lib/db";
 import { getAIProvider } from "@/lib/ai/provider";
 
 const rl = new Map<string, { count: number; reset: number }>();
+const rlIP = new Map<string, { count: number; reset: number }>();
+// FÁZA 0D+2L: cleanup + IP rate limit
+setInterval(() => {
+  const now = Date.now();
+  rl.forEach((v, k) => { if (now > v.reset) rl.delete(k); });
+  rlIP.forEach((v, k) => { if (now > v.reset) rlIP.delete(k); });
+}, 5*60*1000).unref?.();
+
+function getIP(req: NextRequest): string {
+  return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || "unknown";
+}
 function checkRate(userId: string) {
   const now = Date.now();
   const rec = rl.get(userId);
@@ -15,6 +26,20 @@ function checkRate(userId: string) {
   rec.count++;
   return true;
 }
+function checkRateIP(ip: string) {
+  const now = Date.now();
+  const rec = rlIP.get(ip);
+  if (!rec || now > rec.reset) {
+    rlIP.set(ip, { count: 1, reset: now + 60*1000 });
+    return true;
+  }
+  if (rec.count >= 30) return false;
+  rec.count++;
+  return true;
+}
+// FÁZA 2L: p-limit pre AI — max 3 súbežné analýzy, zvyšok 429
+let concurrent = 0;
+const MAX_CONCURRENT = 3;
 
 // Smart priradenie do času – AI rozozná či jedlo je snack alebo poriadne jedlo:
 //   snack (keks, tyčinka, ovocie...) → vždy "snack" bez ohľadu na hodinu
@@ -35,11 +60,15 @@ function smartMealType(foodClass: string | undefined, requested: string): string
 }
 
 export async function POST(req: NextRequest) {
+  const ip = getIP(req);
+  if (!checkRateIP(ip)) return NextResponse.json({ error: "Rate limit IP: max 30/min" }, { status: 429 });
+  if (concurrent >= MAX_CONCURRENT) return NextResponse.json({ error: "Server busy, skús o sekundu" }, { status: 429 });
   const token = getTokenFromCookie(req.headers.get("cookie"));
   if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const payload = await verifyToken(token);
   if (!payload) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!checkRate(payload.userId)) return NextResponse.json({ error: "Rate limit: max 10/min" }, { status: 429 });
+  const tStart = Date.now();
 
   const user = await findUserById(payload.userId);
   if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -59,16 +88,22 @@ export async function POST(req: NextRequest) {
     const base64 = `data:${file.type};base64,${buf.toString("base64")}`;
 
     const provider = getAIProvider();
-    // Analyze = iba analýza, NIE uloženie. Jedlo sa uloží až cez "Save to diary" (POST /api/meals).
+    // FÁZA 2L: p-limit — chráni AI pred preťažením
+    if (concurrent >= MAX_CONCURRENT) return NextResponse.json({ error: "Server busy, skús o sekundu" }, { status: 429 });
+    concurrent++;
     let result;
     try {
-      result = await provider.analyze(base64, { mealType, note, locale: (form.get("locale") as string) === "en" ? "en" : "sk" });
+      result = await provider.analyze(base64, { mealType, note, locale });
     } catch (aiErr: any) {
       // AI nedostupné (rate limit free variantu / výpadok) → mock odhad, appka funguje ďalej
       console.error("AI analyze failed, fallback to mock:", aiErr?.message);
       const { MockProvider } = await import("@/lib/ai/provider");
-      result = await new MockProvider().analyze(base64, { mealType, note });
+      result = await new MockProvider().analyze(base64, { mealType, note, locale });
       result.tips = `⚠️ AI limit prekročený – zobrazený je hrubý odhad. Skús o chvíľu znova. ${result.tips}`;
+    } finally {
+      concurrent = Math.max(0, concurrent - 1);
+      const dur = Date.now() - tStart;
+      console.log(`[analyze] ${payload.userId} ${dur}ms concurrent:${concurrent} ip:${ip} note:${note ? "yes" : "no"}`);
     }
 
     // Decide thumbnail storage – space efficient

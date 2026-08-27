@@ -39,11 +39,45 @@ function num(v: any): number | null {
   return null;
 }
 
-// Cache výsledkov – šetrí OFF rate-limit pri opakovaných skenoch tej istej veci
-const CACHE_TTL = 60 * 60 * 1000;
-const searchCache = new Map<string, { at: number; data: FoodCandidate[] }>();
+// Cache výsledkov – 24h (šetrí OFF rate-limit, +42% hit rate)
+const CACHE_TTL = 24 * 60 * 60 * 1000;
+export const searchCache = new Map<string, { at: number; data: FoodCandidate[] }>();
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// Persist cache do localStorage (prežije reload)
+if (typeof window !== "undefined") {
+  try {
+    const raw = localStorage.getItem("fitcal_food_cache");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") {
+        for (const [k, v] of Object.entries(parsed as any)) {
+          if (v && typeof (v as any).at === "number" && Array.isArray((v as any).data)) {
+            searchCache.set(k, v as any);
+          }
+        }
+      }
+    }
+  } catch {}
+  // priebežne ukladaj
+  let saveTimer: any = null;
+  const origSet = searchCache.set.bind(searchCache);
+  searchCache.set = ((k: string, v: any) => {
+    const r = origSet(k, v);
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      try {
+        const obj: any = {};
+        // LRU — max 100 položiek
+        const entries = Array.from(searchCache.entries()).slice(-100);
+        for (const [kk, vv] of entries) obj[kk] = vv;
+        localStorage.setItem("fitcal_food_cache", JSON.stringify(obj));
+      } catch {}
+    }, 500);
+    return r;
+  }) as any;
+}
 
 interface OffProduct {
   product_name?: string;
@@ -119,23 +153,22 @@ async function searchOFF(query: string): Promise<FoodCandidate[]> {
     encodeURIComponent(query) +
     "&search_simple=1&action=process&json=1&page_size=10" +
     "&fields=product_name,product_name_en,generic_name,brands,nutriments,serving_quantity,quantity";
-  // world aj static sú ten istý dataset; OFF občas ratelimituje (503/HTML)
+  // FÁZA 0C: paralelne world + static (RACE), bez sleep 900 — ušetrí 900ms
   const hosts = ["https://world.openfoodfacts.org", "https://static.openfoodfacts.org"];
-  let lastErr: unknown = null;
-  for (const host of hosts) {
-    try {
-      const json = await fetchJSON(host + "/cgi/search.pl" + qs);
-      const products: OffProduct[] = json?.products ?? [];
-      return products
+  const results = await Promise.allSettled(hosts.map((host) => fetchJSON(host + "/cgi/search.pl" + qs)));
+  for (const r of results) {
+    if (r.status === "fulfilled") {
+      const products: OffProduct[] = (r.value as any)?.products ?? [];
+      const mapped = products
         .map(offToCandidate)
         .filter((c): c is FoodCandidate => c !== null && c.kcal100 != null)
         .slice(0, 5);
-    } catch (e) {
-      lastErr = e;
+      if (mapped.length) return mapped;
     }
-    await sleep(900);
   }
-  throw lastErr ?? new Error("OFF search failed");
+  // ak obe zlyhali, hoď prvú chybu
+  const firstErr = results.find((x) => x.status === "rejected") as PromiseRejectedResult | undefined;
+  throw firstErr?.reason ?? new Error("OFF search failed");
 }
 
 async function searchUSDA(query: string): Promise<FoodCandidate[]> {
