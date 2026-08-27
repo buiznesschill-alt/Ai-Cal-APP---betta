@@ -10,6 +10,14 @@ export const metadata: Metadata = {
   description: "YAZIO-like AI calorie tracker – odfot jedlo, spočítam kalórie",
   manifest: "/manifest.json",
   appleWebApp: { capable: true, title: "FitCal", statusBarStyle: "default" },
+  icons: {
+    // favicon podľa systému: light -> logo-light.ico via /icon-light.png, dark -> logo-dark.png
+    icon: [
+      { url: "/favicon-light.png", sizes: "any", type: "image/png", media: "(prefers-color-scheme: light)" },
+      { url: "/favicon-dark.png", sizes: "any", type: "image/png", media: "(prefers-color-scheme: dark)" },
+    ],
+    apple: [{ url: "/icon-192.png", sizes: "180x180" }],
+  },
 };
 
 export const viewport: Viewport = {
