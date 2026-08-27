@@ -9,8 +9,8 @@ export function Header({ username, displayName }: { username?: string; displayNa
   const { t } = useI18n();
   const { resolved } = useTheme();
   const initial = (displayName || username || "P").charAt(0).toUpperCase();
-  // cache-bust ?v=2 – Cloudflare/browser cache otherwise serves the old white-background files
-  const logoSrc = resolved === "dark" ? "/logo-dark.png?v=2" : "/logo-light.png?v=2";
+  // cache-bust ?v=4 – nová verzia s alpha-aware resize (žiadny biely halo/fringe)
+  const logoSrc = resolved === "dark" ? "/logo-dark.png?v=4" : "/logo-light.png?v=4";
 
   return (
     <header className="sticky top-0 z-40 bg-zinc-900 dark:bg-zinc-950" suppressHydrationWarning>
