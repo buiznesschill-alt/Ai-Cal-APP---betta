@@ -105,23 +105,13 @@ export function IntroTour({ open, onClose }: { open: boolean; onClose: () => voi
 export function useIntroAuto() {
   const [open, setOpen] = useState(false);
   useEffect(() => {
-    const check = () => {
-      try {
-        const seen = localStorage.getItem("fitcal_intro_seen");
-        if (!seen) setOpen(true);
-      } catch {}
-    };
-    // auto pre nový účet (nemá seen)
-    const t = setTimeout(check, 1200);
     const onStart = () => {
-      try { localStorage.removeItem("fitcal_intro_seen"); } catch {}
       setOpen(true);
     };
     window.addEventListener("fitcal:startIntro", onStart as any);
-    return () => { clearTimeout(t); window.removeEventListener("fitcal:startIntro", onStart as any); };
+    return () => window.removeEventListener("fitcal:startIntro", onStart as any);
   }, []);
   const close = () => {
-    try { localStorage.setItem("fitcal_intro_seen", "1"); } catch {}
     setOpen(false);
   };
   return { open, setOpen, close };
