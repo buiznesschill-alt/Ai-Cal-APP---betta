@@ -2,7 +2,7 @@ import fs from "fs/promises";
 import path from "path";
 import os from "os";
 import { v4 as uuidv4 } from "uuid";
-import type { User, Meal, Favorite, WaterDay, WeightEntry, DayScore } from "./types";
+import type { User, Meal, Favorite, WaterDay, WeightEntry, DayScore, Sickness } from "./types";
 import { emitUserEvent } from "./serverEvents";
 
 // Use temp dir to avoid Next.js file watching restart on data changes (space-efficient, not watched)
@@ -18,6 +18,7 @@ type DB = {
   water?: WaterDay[];
   weights?: WeightEntry[];
   dayScores?: DayScore[];
+  sicknesses?: Sickness[];
 };
 
 let memoryCache: DB | null = null;
@@ -41,10 +42,11 @@ async function readDB(): Promise<DB> {
     if (!parsed.water) parsed.water = [];
     if (!parsed.weights) parsed.weights = [];
     if (!parsed.dayScores) parsed.dayScores = [];
+    if (!parsed.sicknesses) parsed.sicknesses = [];
     memoryCache = parsed;
     return parsed;
   } catch {
-    const init: DB = { users: [], meals: [], favorites: [], water: [], weights: [], dayScores: [] };
+    const init: DB = { users: [], meals: [], favorites: [], water: [], weights: [], dayScores: [], sicknesses: [] };
     memoryCache = init;
     await writeDB(init);
     return init;
@@ -234,33 +236,99 @@ export async function getAllDayTotals(userId: string): Promise<{ date: string; t
     .map(([date, totalKcal]) => ({ date, totalKcal }));
 }
 
-// Beta: zamknuté denné skóre – každý minulý deň = presne ±1 bod, nikdy sa nezmení
+// Helper: je dátum v aktívnej chorobe?
+function isDateInSickness(db: DB, userId: string, date: string): boolean {
+  if (!db.sicknesses) return false;
+  return db.sicknesses.some((s) => s.userId === userId && date >= s.startDate && (s.endDate == null || date <= s.endDate));
+}
+
+// Beta: zamknuté denné skóre – každý minulý deň = presne ±1/0 bod, nikdy sa nezmení
+// - prázdny deň (žiadne jedlo) = -1 od prvého jedla
+// - choroba freeze = 0 (modrá) — počas choroby sa hodnoty nepočítajú, body sa neodpočítavajú
 export async function finalizeDayScores(userId: string, goal: number): Promise<void> {
   const db = await readDB();
   if (!db.dayScores) db.dayScores = [];
+  if (!db.sicknesses) db.sicknesses = [];
   const today = new Date().toISOString().slice(0, 10);
   const totals: Record<string, number> = {};
   for (const m of db.meals) {
     if (m.userId === userId) totals[m.date] = (totals[m.date] || 0) + m.kcal;
   }
+  // nájdi prvé jedlo — odvtedy sa počíta každý deň
+  const allDates = Object.keys(totals).sort();
+  if (allDates.length === 0) return;
+  const firstDate = allDates[0];
   let changed = false;
-  for (const [date, kcal] of Object.entries(totals)) {
-    if (date >= today) continue; // dnešok sa zatvára až zajtra
-    if (db.dayScores.some((s) => s.userId === userId && s.date === date)) continue; // už zamknuté
-    const pts = kcal > goal - 500 && kcal <= goal + 100 ? 1 : -1;
-    db.dayScores.push({ userId, date, points: pts });
+  // loop každý deň od firstDate do yesterday
+  const d = new Date(firstDate + "T12:00:00");
+  const end = new Date(today + "T12:00:00");
+  end.setDate(end.getDate() - 1); // yesterday
+  for (; d <= end; d.setDate(d.getDate() + 1)) {
+    const date = d.toISOString().slice(0, 10);
+    if (db.dayScores.some((s) => s.userId === userId && s.date === date)) continue;
+    let pts: number;
+    let reason: "ok" | "empty" | "sick" | "freeze" = "ok";
+    if (isDateInSickness(db, userId, date)) {
+      pts = 0;
+      reason = "freeze";
+    } else if (totals[date] == null) {
+      pts = -1;
+      reason = "empty";
+    } else {
+      const kcal = totals[date];
+      const ok = kcal > goal - 500 && kcal <= goal + 100;
+      pts = ok ? 1 : -1;
+      reason = ok ? "ok" : "empty";
+    }
+    db.dayScores.push({ userId, date, points: pts, reason } as any);
     changed = true;
   }
   if (changed) await queuedWrite(db);
 }
 
-export async function getDayScores(userId: string): Promise<{ date: string; points: number }[]> {
+export async function getDayScores(userId: string): Promise<{ date: string; points: number; reason?: string }[]> {
   const db = await readDB();
   if (!db.dayScores) db.dayScores = [];
   return db.dayScores
     .filter((s) => s.userId === userId)
     .sort((a, b) => a.date.localeCompare(b.date))
-    .map(({ date, points }) => ({ date, points }));
+    .map(({ date, points, reason }) => ({ date, points, reason } as any));
+}
+
+// Sickness / freeze — modrá 0
+export async function getSicknesses(userId: string): Promise<Sickness[]> {
+  const db = await readDB();
+  if (!db.sicknesses) db.sicknesses = [];
+  return db.sicknesses.filter((s) => s.userId === userId).sort((a,b)=> b.startDate.localeCompare(a.startDate));
+}
+export async function getActiveSickness(userId: string): Promise<Sickness | null> {
+  const db = await readDB();
+  if (!db.sicknesses) db.sicknesses = [];
+  return db.sicknesses.find((s) => s.userId === userId && s.endDate == null) || null;
+}
+export async function createSickness(userId: string, note: string): Promise<Sickness> {
+  const db = await readDB();
+  if (!db.sicknesses) db.sicknesses = [];
+  // ukonči predchádzajúcu aktívnu ak existuje
+  const active = db.sicknesses.find((s) => s.userId === userId && s.endDate == null);
+  if (active) active.endDate = new Date(Date.now()-86400000).toISOString().slice(0,10);
+  const today = new Date().toISOString().slice(0,10);
+  const s: Sickness = { id: uuidv4(), userId, startDate: today, endDate: null, note: note.slice(0,200), createdAt: new Date().toISOString() };
+  db.sicknesses.push(s);
+  await queuedWrite(db);
+  emitUserEvent(userId, "sickness");
+  return s;
+}
+export async function endSickness(userId: string): Promise<Sickness | null> {
+  const db = await readDB();
+  if (!db.sicknesses) db.sicknesses = [];
+  const active = db.sicknesses.find((s) => s.userId === userId && s.endDate == null);
+  if (!active) return null;
+  // freeze končí dnes, od zajtra opäť normálne
+  active.endDate = new Date().toISOString().slice(0,10);
+  await queuedWrite(db);
+  emitUserEvent(userId, "sickness");
+  return active;
 }
 
 // Beta: favorites

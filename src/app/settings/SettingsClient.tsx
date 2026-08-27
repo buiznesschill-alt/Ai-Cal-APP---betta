@@ -10,6 +10,83 @@ import dynamic from "next/dynamic";
 const QRCodePanel = dynamic(() => import("@/components/QRCodePanel").then((m) => m.QRCodePanel), { ssr: false });
 import { useI18n } from "@/lib/i18n";
 import { normalizeAutoMeal } from "@/lib/autoMeal";
+import { BUS, emitBus } from "@/lib/bus";
+
+function SicknessPanel() {
+  const { t } = useI18n();
+  const [active, setActive] = useState<any>(null);
+  const [history, setHistory] = useState<any[]>([]);
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [showInfo, setShowInfo] = useState(false);
+  const load = async () => {
+    try {
+      const r = await fetch("/api/sickness");
+      if (!r.ok) return;
+      const j = await r.json();
+      setActive(j.active || null);
+      setHistory(j.sicknesses || []);
+    } catch {}
+  };
+  useEffect(() => { load(); }, []);
+  const activate = async () => {
+    if (note.trim().length < 3) return;
+    setBusy(true);
+    const r = await fetch("/api/sickness", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ note }) });
+    const j = await r.json().catch(()=>({}));
+    setBusy(false);
+    if (!r.ok) { alert(j.error || "Chyba"); return; }
+    setNote("");
+    setShowInfo(true);
+    await load();
+    emitBus(BUS.sickness);
+  };
+  const deactivate = async () => {
+    setBusy(true);
+    const r = await fetch("/api/sickness", { method: "DELETE" });
+    setBusy(false);
+    if (!r.ok) { const j=await r.json().catch(()=>({})); alert(j.error||"Chyba"); return; }
+    await load();
+    emitBus(BUS.sickness);
+  };
+  return (
+    <div className="bg-white dark:bg-zinc-900 rounded-4xl shadow-card border border-zinc-100 dark:border-zinc-800 p-5 sm:p-6 space-y-3">
+      <h2 className="font-extrabold flex items-center gap-2">🏥 Choroba / Freeze</h2>
+      <p className="text-xs font-medium text-zinc-500">Počas choroby sa ti nebudú počítať hodnoty ani body (modrá 0), aj keď budeš jesť. Freeze platí od dnes dokým ho nevypneš. -1 od prvého jedla inak.</p>
+      {active ? (
+        <div className="bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/30 rounded-2xl p-3">
+          <p className="text-sm font-bold text-blue-700 dark:text-blue-300">🔵 Aktívna choroba od {active.startDate}</p>
+          <p className="text-xs font-medium text-zinc-600 dark:text-zinc-400 mt-1">Dôvod: {active.note}</p>
+          <button onClick={deactivate} disabled={busy} className="mt-3 w-full rounded-2xl bg-blue-600 text-white font-bold py-2.5 hover:bg-blue-700 disabled:opacity-60">{busy?"...":"Vypnúť chorobu (ukončiť freeze)"}</button>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <textarea value={note} onChange={(e)=>setNote(e.target.value.slice(0,200))} rows={2} placeholder="Napíš aká choroba (napr. chrípka, angína...)" className="w-full rounded-2xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 px-4 py-3 text-sm" />
+          <button onClick={activate} disabled={busy || note.trim().length<3} className="w-full rounded-2xl bg-blue-600 text-white font-bold py-2.5 hover:bg-blue-700 disabled:opacity-60">Aktivovať freeze (modrá 0)</button>
+        </div>
+      )}
+      {showInfo && (
+        <div className="bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-2xl p-3">
+          <p className="text-xs font-bold text-amber-700 dark:text-amber-300">ℹ️ Počas freezu sa ti hodnoty nebudú počítať aj keď budeš jesť, ale nebude sa ti odpočítavať body z ranku.</p>
+          <button onClick={()=>setShowInfo(false)} className="mt-2 text-xs font-bold text-zinc-500">Zavrieť</button>
+        </div>
+      )}
+      {history.length>0 && (
+        <div className="space-y-1">
+          <h3 className="text-xs font-bold tracking-widest text-zinc-500 uppercase">História chorôb</h3>
+          <div className="max-h-32 overflow-y-auto space-y-1 pr-1">
+            {history.slice(0,10).map((s:any)=>(
+              <div key={s.id} className={`flex items-center justify-between rounded-xl px-3 py-2 text-xs ${s.endDate==null?"bg-blue-500 text-white":"bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400"}`}>
+                <span className="font-bold">{s.startDate} → {s.endDate || "aktívna"}</span>
+                <span className="truncate ml-2 max-w-[120px]">{s.note}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function SettingsClient({ user: initial }: { user: any }) {
   const { t, locale, setLocale } = useI18n();
@@ -445,6 +522,28 @@ export default function SettingsClient({ user: initial }: { user: any }) {
               {saving ? t("dash.saving") : t("settings.save")}
             </button>
           </div>
+
+          {/* Intro sprievodca */}
+          <div className="bg-white dark:bg-zinc-900 rounded-4xl shadow-card border border-zinc-100 dark:border-zinc-800 p-5 sm:p-6 space-y-3">
+            <h2 className="font-extrabold flex items-center gap-2">👋 Sprievodca aplikáciou</h2>
+            <p className="text-xs font-medium text-zinc-500">Avatar ťa prevedie celou aplikáciou a ukáže kde čo je a ako sa meria.</p>
+            <button
+              onClick={() => {
+                try { localStorage.removeItem("fitcal_intro_seen"); } catch {}
+                router.push("/");
+                setTimeout(() => {
+                  try { localStorage.removeItem("fitcal_intro_seen"); } catch {}
+                  window.dispatchEvent(new CustomEvent("fitcal:startIntro"));
+                }, 600);
+              }}
+              className="w-full rounded-2xl bg-fitcal-mint text-white font-bold py-3 hover:brightness-95 transition"
+            >
+              Spustiť sprievodcu
+            </button>
+          </div>
+
+          {/* Choroba / freeze — modrá 0 */}
+          <SicknessPanel />
           </div>
           <div className="lg:col-span-4 space-y-6">
             <QRCodePanel />

@@ -17,6 +17,7 @@ export function MonthHeatmap({ goalKcal }: { goalKcal: number }) {
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth()); // 0-based
   const [totals, setTotals] = useState<Map<string, number>>(new Map());
+  const [sicknesses, setSicknesses] = useState<{ startDate: string; endDate: string | null }[]>([]);
   // single floating window, always centered in the calendar
   const [openDay, setOpenDay] = useState<string | null>(null);
   const [dayDetails, setDayDetails] = useState<Record<string, Meal[]>>({});
@@ -31,14 +32,22 @@ export function MonthHeatmap({ goalKcal }: { goalKcal: number }) {
       .then((d) => setTotals(new Map((d.totals || []).map((x: any) => [x.date, x.totalKcal]))))
       .catch(() => {});
   }
+  function fetchSickness() {
+    fetch("/api/sickness").then(r=>r.ok?r.json():Promise.reject()).then(d=> setSicknesses(d.sicknesses||[])).catch(()=>{});
+  }
 
   useEffect(() => {
     fetchTotals();
+    fetchSickness();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [monthKey]);
 
   // live: refresh month totals when any meal is added/removed/deleted elsewhere
-  useEffect(() => onBus(BUS.meals, fetchTotals), [monthKey]);
+  useEffect(() => {
+    const off1 = onBus(BUS.meals, fetchTotals);
+    const off2 = onBus(BUS.sickness, fetchSickness);
+    return () => { off1(); off2(); };
+  }, [monthKey]);
 
   // stale pixel anchor after month switch
   useEffect(() => {
@@ -83,8 +92,20 @@ export function MonthHeatmap({ goalKcal }: { goalKcal: number }) {
     setMonth(d.getMonth());
   }
 
-  function cellColor(kcal?: number): string {
-    if (kcal == null) return "bg-zinc-100 dark:bg-zinc-800 text-zinc-400";
+  function isFreeze(date: string): boolean {
+    return sicknesses.some(s => date >= s.startDate && (s.endDate == null || date <= s.endDate));
+  }
+  function cellColor(kcal?: number, date?: string): string {
+    if (date && isFreeze(date)) return "bg-blue-500 text-white";
+    if (kcal == null) {
+      // prázdny deň od prvého jedla = biela -1 (pokiaľ nie je freeze)
+      if (date) {
+        const today = new Date().toISOString().slice(0,10);
+        const first = Array.from(totals.keys()).sort()[0];
+        if (first && date < today && date >= first) return "bg-white dark:bg-zinc-100 text-zinc-700 border border-zinc-300";
+      }
+      return "bg-zinc-100 dark:bg-zinc-800 text-zinc-400";
+    }
     // biele = low day (goal - 500 a menej)
     if (kcal <= goalKcal - 500) return "bg-white dark:bg-zinc-100 text-zinc-700 border border-zinc-300";
     // zelená = v cieli (goal - 499 až goal + 100)
@@ -124,6 +145,7 @@ export function MonthHeatmap({ goalKcal }: { goalKcal: number }) {
         {cells.map((c, i) => {
           if (!c) return <div key={`e-${i}`} />;
           const kcal = totals.get(c.date);
+          const freeze = isFreeze(c.date);
           const isToday = c.date === new Date().toISOString().slice(0, 10);
           const isOpen = openDay === c.date;
           return (
@@ -133,8 +155,8 @@ export function MonthHeatmap({ goalKcal }: { goalKcal: number }) {
               tabIndex={0}
               onClick={() => toggleDay(c.date)}
               onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && toggleDay(c.date)}
-              title={kcal != null ? `${c.date}: ${kcal} kcal` : c.date}
-              className={`aspect-square rounded-xl flex flex-col items-center justify-center transition cursor-pointer select-none ${cellColor(kcal)} ${isToday ? "ring-2 ring-blue-500" : ""} ${isOpen ? "ring-2 ring-fitcal-mintDark dark:ring-emerald-400 scale-105 shadow-md" : ""}`}
+              title={freeze ? `${c.date}: freeze` : kcal != null ? `${c.date}: ${kcal} kcal` : c.date}
+              className={`aspect-square rounded-xl flex flex-col items-center justify-center transition cursor-pointer select-none ${cellColor(kcal, c.date)} ${isToday ? "ring-2 ring-blue-500" : ""} ${isOpen ? "ring-2 ring-fitcal-mintDark dark:ring-emerald-400 scale-105 shadow-md" : ""}`}
             >
               <span className="text-[11px] sm:text-xs font-bold leading-none">{c.day}</span>
               {kcal != null && <span className="text-[8px] sm:text-[9px] font-bold opacity-80 mt-0.5 leading-none">{kcal}</span>}
@@ -238,6 +260,9 @@ export function MonthHeatmap({ goalKcal }: { goalKcal: number }) {
         </span>
         <span className="flex items-center gap-1">
           <span className="h-2.5 w-2.5 rounded-full bg-red-500 inline-block" /> {t("cal.legendOver")} (≥ {goalKcal + 101})
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="h-2.5 w-2.5 rounded-full bg-blue-500 inline-block" /> freeze
         </span>
         <span className="flex items-center gap-1">
           <span className="h-2.5 w-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700 inline-block" /> {t("cal.legendNone")}

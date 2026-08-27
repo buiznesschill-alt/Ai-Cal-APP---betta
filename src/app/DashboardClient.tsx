@@ -18,6 +18,7 @@ import { MonthHeatmap } from "@/components/MonthHeatmap";
 import { PortionEditModal } from "@/components/PortionEdit";
 import { useSectionDisplay } from "@/lib/display";
 import { MealTypeIcon } from "@/components/MealTypeIcon";
+import { IntroTour, useIntroAuto } from "@/components/IntroTour";
 import { BUS, emitBus, onBus } from "@/lib/bus";
 import dynamic from "next/dynamic";
 
@@ -51,13 +52,14 @@ export default function DashboardClient({
   const [history, setHistory] = useState<any[]>(initialHistory || []);
   const [tab, setTab] = useState<"today" | "history" | "tips">("today");
   const [mealFilter, setMealFilter] = useState<Meal["mealType"] | "all">("all");
-  const [analysis, setAnalysis] = useState<{ result: any; thumbnail: string | null; mealType?: string } | null>(null);
+  const [analysis, setAnalysis] = useState<{ result: any; thumbnail: string | null; mealType?: string; foodClass?: "main"|"snack" } | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [showManual, setShowManual] = useState(false);
   const [showBarcode, setShowBarcode] = useState(false);
   const [portionMeal, setPortionMeal] = useState<Meal | null>(null);
   const [starredId, setStarredId] = useState<string | null>(null);
+  const { open: introOpen, setOpen: setIntroOpen, close: closeIntro } = useIntroAuto();
 
   // Beta: recent unique dishes for quick re-add
   const recents = useMemo(() => {
@@ -170,12 +172,15 @@ export default function DashboardClient({
     es.addEventListener("favorites", () => {
       loadFavorites();
     });
+    es.addEventListener("sickness", () => {
+      emitBus(BUS.sickness);
+    });
     return () => es.close();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function handleResult(data: { result: any; thumbnail: string | null; mealType?: string }) {
-    setAnalysis(data);
+    setAnalysis({ ...data, foodClass: data.result?.foodClass });
     setTab("today");
   }
 
@@ -346,7 +351,7 @@ export default function DashboardClient({
   // ---------- daily goal card (shared) ----------
   function DailyGoalCard({ compact }: { compact?: boolean }) {
     return (
-      <div id="daily-goal-card" className={`bg-white dark:bg-zinc-900 scroll-mt-24 ${compact ? "rounded-3xl p-4" : "rounded-3xl xl:rounded-4xl shadow-card border border-zinc-100 dark:border-zinc-800 p-4 sm:p-6"}`}>
+      <div id="daily-goal-card" data-tour="goal" className={`bg-white dark:bg-zinc-900 scroll-mt-24 ${compact ? "rounded-3xl p-4" : "rounded-3xl xl:rounded-4xl shadow-card border border-zinc-100 dark:border-zinc-800 p-4 sm:p-6"}`}>
         <div className="flex items-center justify-between mb-1">
           <span className="flex items-center gap-1.5">
             <h2 className={`font-extrabold ${compact ? "text-sm" : "text-base sm:text-lg"}`}>{t("dash.goal")}</h2>
@@ -403,7 +408,7 @@ export default function DashboardClient({
         active ? "bg-white dark:bg-zinc-950 shadow text-zinc-900 dark:text-zinc-100" : "text-zinc-500 dark:text-zinc-400"
       }`;
     return (
-      <div className="bg-white dark:bg-zinc-900 rounded-3xl sm:rounded-4xl shadow-card border border-zinc-100 dark:border-zinc-800 p-3 sm:p-6">
+      <div data-tour="meals" className="bg-white dark:bg-zinc-900 rounded-3xl sm:rounded-4xl shadow-card border border-zinc-100 dark:border-zinc-800 p-3 sm:p-6">
         <div className="flex items-center justify-between mb-2">
           <span className="flex items-center gap-1.5">
             <h3 className="font-extrabold text-sm sm:text-base">
@@ -485,6 +490,8 @@ export default function DashboardClient({
               <NutritionCard
                 result={analysis.result}
                 thumbnail={analysis.thumbnail}
+                mealType={analysis.mealType as any}
+                foodClass={analysis.foodClass as any}
                 onSave={saveMeal}
                 onCancel={() => {
                   // X = zruš analýzu a skoč úplne hore, aby bolo skenovanie nového jedla po ruke
@@ -503,14 +510,14 @@ export default function DashboardClient({
             <motion.div key="today" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
               {/* MOBILE stacked order: 2 scan → 1 goal → favorites → 4 meals → water → stats → 5 chart → 3 tips */}
               <div className="sm:hidden space-y-4">
-                <CameraCapture onResult={handleResult} onManual={() => setShowManual(true)} onBarcode={() => setShowBarcode(true)} autoMeal={user.autoMeal} />
+                <div data-tour="scan"><CameraCapture onResult={handleResult} onManual={() => setShowManual(true)} onBarcode={() => setShowBarcode(true)} autoMeal={user.autoMeal} /></div>
                 <DailyGoalCard compact />
-                <FavoritesRow recents={recents} onAdded={refresh} autoMeal={user.autoMeal} />
+                <div data-tour="favorites"><FavoritesRow recents={recents} onAdded={refresh} autoMeal={user.autoMeal} /></div>
                 <MealsCard maxHeight="max-h-72" />
-                <WaterCard goalMl={user.goalWaterMl ?? 2000} />
-                <StatsCard goalKcal={user.goalKcal} />
-                <DayChart meals={summary.meals} />
-                <HealthTips onShowAll={() => { setTab("tips"); window.scrollTo(0, 0); }} />
+                <div data-tour="water"><WaterCard goalMl={user.goalWaterMl ?? 2000} /></div>
+                <div data-tour="stats"><StatsCard goalKcal={user.goalKcal} /></div>
+                <div data-tour="chart"><DayChart meals={summary.meals} /></div>
+                <div data-tour="tips"><HealthTips onShowAll={() => { setTab("tips"); window.scrollTo(0, 0); }} /></div>
               </div>
 
               {/* DESKTOP grid: 1 | 2+fav+4 | 3+5+water+stats */}
@@ -518,15 +525,15 @@ export default function DashboardClient({
                 <div className={`grid ${todayCols} gap-6 items-start`}>
                   <DailyGoalCard />
                   <div className="space-y-6">
-                    <CameraCapture onResult={handleResult} onManual={() => setShowManual(true)} onBarcode={() => setShowBarcode(true)} autoMeal={user.autoMeal} />
-                    <FavoritesRow recents={recents} onAdded={refresh} autoMeal={user.autoMeal} />
+                    <div data-tour="scan"><CameraCapture onResult={handleResult} onManual={() => setShowManual(true)} onBarcode={() => setShowBarcode(true)} autoMeal={user.autoMeal} /></div>
+                    <div data-tour="favorites"><FavoritesRow recents={recents} onAdded={refresh} autoMeal={user.autoMeal} /></div>
                     <MealsCard maxHeight="max-h-[420px]" />
                   </div>
                   <div className="space-y-6">
-                    <HealthTips onShowAll={() => { setTab("tips"); window.scrollTo(0, 0); }} />
-                    <DayChart meals={summary.meals} />
-                    <WaterCard goalMl={user.goalWaterMl ?? 2000} />
-                    <StatsCard goalKcal={user.goalKcal} />
+                    <div data-tour="tips"><HealthTips onShowAll={() => { setTab("tips"); window.scrollTo(0, 0); }} /></div>
+                    <div data-tour="chart"><DayChart meals={summary.meals} /></div>
+                    <div data-tour="water"><WaterCard goalMl={user.goalWaterMl ?? 2000} /></div>
+                    <div data-tour="stats"><StatsCard goalKcal={user.goalKcal} /></div>
                   </div>
                 </div>
               </div>
@@ -539,17 +546,17 @@ export default function DashboardClient({
             <motion.div key="history" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
               {/* MOBILE */}
               <div className="sm:hidden space-y-4">
-                <MonthHeatmap goalKcal={user.goalKcal} />
-                <HistoryList history={history} />
-                <TrendCharts userId={user.id} />
+                <div data-tour="heatmap"><MonthHeatmap goalKcal={user.goalKcal} /></div>
+                <div data-tour="history"><HistoryList history={history} /></div>
+                <div data-tour="trend"><TrendCharts userId={user.id} /></div>
               </div>
               {/* DESKTOP: meal list | chart side by side, heatmap below */}
               <div className="hidden sm:block space-y-6">
                 <div className={`grid ${histCols} gap-6 items-start`}>
-                  <HistoryList history={history} />
-                  <TrendCharts userId={user.id} />
+                  <div data-tour="history"><HistoryList history={history} /></div>
+                  <div data-tour="trend"><TrendCharts userId={user.id} /></div>
                 </div>
-                <MonthHeatmap goalKcal={user.goalKcal} />
+                <div data-tour="heatmap"><MonthHeatmap goalKcal={user.goalKcal} /></div>
               </div>
             </motion.div>
           )}
@@ -559,6 +566,7 @@ export default function DashboardClient({
         <ManualMealModal open={showManual} onClose={() => setShowManual(false)} onSaved={refresh} autoMeal={user.autoMeal} />
         <BarcodeScan open={showBarcode} onClose={() => setShowBarcode(false)} onSaved={refresh} autoMeal={user.autoMeal} onManual={() => { setShowBarcode(false); setShowManual(true); }} />
         <PortionEditModal meal={portionMeal} onClose={() => setPortionMeal(null)} onSaved={() => refresh()} />
+        <IntroTour open={introOpen} onClose={closeIntro} />
       </main>
     </div>
   );

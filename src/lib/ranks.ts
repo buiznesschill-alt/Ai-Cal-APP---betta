@@ -51,21 +51,27 @@ export function pointsFromTotals(totals: { totalKcal: number }[], goal: number):
   return pts;
 }
 
-// Logika: za ka�d� de� max �1 bod.
-// - minul� dni: zamknut� v ledgeri (dayScores) � mazanie jed�l ich u� nezmen�
-// - dne�ok: live pod�a aktu�lneho s��tu (zamkne sa zajtra)
+// Logika: za každý deň max 1 bod.
+// - minulé dni: zamknuté v ledgeri (dayScores) — mazanie jedál ich už nezmení, prázdny deň = -1 od prvého jedla, freeze = 0 modrá
+// - dnes: live podľa aktuálneho súčtu (zamkne sa zajtra) — počas choroby 0
 export function computePoints(
   totals: { date: string; totalKcal: number }[],
   scores: { date: string; points: number }[],
-  goal: number
+  goal: number,
+  opts?: { isSickToday?: boolean; firstDate?: string | null }
 ): number {
   const today = new Date().toISOString().slice(0, 10);
   let pts = 0;
   for (const s of scores) pts += s.points;
-  for (const t of totals) {
-    if (t.date >= today) {
-      pts += t.totalKcal > goal - 500 && t.totalKcal <= goal + 100 ? 1 : -1;
-    }
+  // ak je dnes freeze, nepridávaj nič (0)
+  if (opts?.isSickToday) return pts;
+  // nájdi dnešný total
+  const todayEntry = totals.find((t) => t.date === today);
+  if (todayEntry) {
+    pts += todayEntry.totalKcal > goal - 500 && todayEntry.totalKcal <= goal + 100 ? 1 : -1;
+  } else if (opts?.firstDate && opts.firstDate <= today) {
+    // prázdny deň od prvého jedla = -1 (pokiaľ nie je freeze)
+    pts += -1;
   }
   return pts;
 }

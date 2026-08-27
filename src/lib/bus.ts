@@ -8,6 +8,7 @@ export const BUS = {
   favorites: "fitcal:favorites-changed",
   water: "fitcal:water-changed",
   weights: "fitcal:weights-changed",
+  sickness: "fitcal:sickness-changed",
 } as const;
 
 const CHANNEL_NAME = "fitcal-sync";

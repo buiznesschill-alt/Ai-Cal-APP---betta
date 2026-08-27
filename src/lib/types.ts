@@ -104,7 +104,17 @@ export interface WeightEntry {
 export interface DayScore {
   userId: string;
   date: string; // YYYY-MM-DD
-  points: number; // +1 alebo -1, zamknuté navždy
+  points: number; // +1 alebo -1 alebo 0 (freeze), zamknuté navždy
+  reason?: "ok" | "empty" | "sick" | "freeze";
+}
+
+export interface Sickness {
+  id: string;
+  userId: string;
+  startDate: string; // YYYY-MM-DD
+  endDate: string | null; // null = aktívna
+  note: string;
+  createdAt: string;
 }
 
 export interface NutritionResult {

@@ -1,7 +1,8 @@
 "use client";
 import { motion } from "framer-motion";
-import type { NutritionResult } from "@/lib/types";
+import type { NutritionResult, MealType } from "@/lib/types";
 import { useI18n } from "@/lib/i18n";
+import { MealTypeIcon } from "@/components/MealTypeIcon";
 
 export function NutritionCard({
   result,
@@ -10,6 +11,8 @@ export function NutritionCard({
   onCancel,
   saving,
   showTips = true,
+  mealType,
+  foodClass,
 }: {
   result: NutritionResult;
   thumbnail: string | null;
@@ -17,6 +20,8 @@ export function NutritionCard({
   onCancel?: () => void;
   saving?: boolean;
   showTips?: boolean;
+  mealType?: MealType;
+  foodClass?: "main" | "snack";
 }) {
   const { t } = useI18n();
   return (
@@ -32,7 +37,22 @@ export function NutritionCard({
       )}
       <div className="p-4 sm:p-6">
         <div className="flex items-start justify-between gap-3">
-          <div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap mb-1">
+              {mealType && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-black bg-zinc-900 dark:bg-white dark:text-zinc-900 text-white px-2 py-1 rounded-full">
+                  <MealTypeIcon type={mealType} className="h-3 w-3" /> {t(`meal.${mealType}`)}
+                </span>
+              )}
+              {foodClass && (
+                <span className={`text-[10px] font-black px-2 py-1 rounded-full ${foodClass === "snack" ? "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300" : "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"}`}>
+                  {foodClass === "snack" ? "Snack" : "Hlavné jedlo"}
+                </span>
+              )}
+              {result.source && (
+                <span className="text-[10px] font-bold bg-fitcal-mintLight text-fitcal-mintDark px-2 py-1 rounded-full truncate max-w-[120px]">{result.source}</span>
+              )}
+            </div>
             <h3 className="text-lg font-extrabold leading-tight">{result.dish}</h3>
             <p className="text-sm text-zinc-500 mt-1">{result.description}</p>
           </div>
@@ -82,20 +102,30 @@ export function NutritionCard({
           <span className="bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded-full">{result.kcal} {t("nut.kcal")}</span>
         </div>
 
-        {(!!result.iron || !!result.potassium) && (
-          <div className="mt-2 flex gap-1.5 flex-wrap">
-            {!!result.iron && (
-              <span className="text-[10px] font-bold bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 px-2 py-1 rounded-full">
-                {t("nut.iron")} {result.iron} mg
-              </span>
-            )}
-            {!!result.potassium && (
-              <span className="text-[10px] font-bold bg-lime-50 dark:bg-lime-500/10 text-lime-700 dark:text-lime-300 px-2 py-1 rounded-full">
-                {t("nut.potassium")} {result.potassium} mg
-              </span>
-            )}
+        {/* Všetky živiny — rovnako ako na hlavnej (9 krúžkov) */}
+        <div className="mt-4">
+          <h4 className="font-bold text-xs mb-2 flex items-center gap-1.5">🥗 {t("dash.macros")} — {t("nut.portion")}</h4>
+          <div className="grid grid-cols-3 gap-2 text-center">
+            {[
+              { label: t("nut.protein"), value: `${result.protein}g`, sub: `${Math.round((result.protein*4/ Math.max(result.kcal,1))*100)}%`, color: "bg-emerald-500" },
+              { label: t("nut.carbs"), value: `${result.carbs}g`, sub: `${Math.round((result.carbs*4/ Math.max(result.kcal,1))*100)}%`, color: "bg-amber-500" },
+              { label: t("nut.fat"), value: `${result.fat}g`, sub: `${Math.round((result.fat*9/ Math.max(result.kcal,1))*100)}%`, color: "bg-orange-500" },
+              { label: t("nut.fiber"), value: `${result.fiber}g`, sub: "30g cieľ", color: "bg-cyan-500" },
+              { label: t("nut.sugar"), value: `${result.sugar}g`, sub: "50g cieľ", color: "bg-pink-500" },
+              { label: t("nut.salt"), value: `${result.salt}g`, sub: "6g cieľ", color: "bg-violet-500" },
+              { label: t("nut.iron"), value: result.iron != null ? `${result.iron} mg` : "—", sub: "železo", color: "bg-amber-600" },
+              { label: t("nut.potassium"), value: result.potassium != null ? `${result.potassium} mg` : "—", sub: "draslík", color: "bg-lime-500" },
+              { label: t("nut.portion"), value: `${result.portion_g}g`, sub: t("nut.kcal"), color: "bg-zinc-800 dark:bg-zinc-700" },
+            ].map((m) => (
+              <div key={m.label} className="bg-zinc-50 dark:bg-zinc-800/60 rounded-2xl py-2.5">
+                <div className={`mx-auto h-1.5 w-8 rounded-full ${m.color} mb-1`} />
+                <div className="text-xs font-black">{m.value}</div>
+                <div className="text-[10px] font-bold text-zinc-500 leading-tight">{m.label}</div>
+                <div className="text-[9px] font-semibold text-zinc-400">{m.sub}</div>
+              </div>
+            ))}
           </div>
-        )}
+        </div>
 
         {showTips && result.tips && (
           <div className="mt-4 bg-fitcal-mintLight dark:bg-emerald-500/10 rounded-2xl p-3 flex gap-2">

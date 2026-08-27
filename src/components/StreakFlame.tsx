@@ -20,6 +20,7 @@ type StreakData = {
   points: number;
   goal: number;
   totals: Map<string, number>;
+  sicknesses: { startDate: string; endDate: string | null }[];
 };
 
 export function StreakFlame() {
@@ -30,27 +31,48 @@ export function StreakFlame() {
   const [previewRank, setPreviewRank] = useState<string | null>(null);
   const [data, setData] = useState<StreakData | null>(null);
 
+  const [sicknessActive, setSicknessActive] = useState(false);
   useEffect(() => {
     let active = true;
     const load = () => {
-      Promise.all([fetch("/api/meals?summary=all"), fetch("/api/settings")])
-        .then(async ([m, s]) => {
+      Promise.all([fetch("/api/meals?summary=all"), fetch("/api/settings"), fetch("/api/sickness").catch(()=>null)])
+        .then(async ([m, s, sickRes]) => {
           if (!m.ok || !s.ok) throw new Error();
           const md = await m.json();
           const sd = await s.json();
           const goal: number = sd.user?.goalKcal ?? 2000;
           const totals: { date: string; totalKcal: number }[] = md.totals || [];
           const scores: { date: string; points: number }[] = md.scores || [];
-          const points = computePoints(totals, scores, goal);
-          if (active) setData({ points, goal, totals: new Map(totals.map((x) => [x.date, x.totalKcal])) });
+          // zisti či je dnes freeze
+          let isSickToday = false;
+          let sicknesses: { startDate: string; endDate: string | null }[] = [];
+          let firstDate: string|null = null;
+          try {
+            if (sickRes && sickRes.ok) {
+              const sj = await sickRes.json();
+              isSickToday = !!sj.active;
+              sicknesses = sj.sicknesses || [];
+              if (sj.active) sicknesses.unshift(sj.active);
+            }
+          } catch {}
+          if (totals.length) firstDate = totals.map(t=>t.date).sort()[0];
+          // ak ešte žiadne jedlo, ale máme scores, zisti firstDate zo scores
+          if (!firstDate && scores.length) firstDate = scores.map((s:any)=>s.date).sort()[0];
+          const points = computePoints(totals, scores, goal, { isSickToday, firstDate });
+          if (active) {
+            setData({ points, goal, totals: new Map(totals.map((x) => [x.date, x.totalKcal])), sicknesses });
+            setSicknessActive(isSickToday);
+          }
         })
         .catch(() => {
-          if (active) setData({ points: 0, goal: 2000, totals: new Map() });
+          if (active) setData({ points: 0, goal: 2000, totals: new Map(), sicknesses: [] });
         });
     };
     load();
     // LIVE: prepočet hneď keď sa kdekoľvek pridá/zmaže jedlo (lokálne aj z iného zariadenia)
-    return onBus(BUS.meals, load);
+    const offMeals = onBus(BUS.meals, load);
+    const offSick = onBus(BUS.sickness, load);
+    return () => { offMeals(); offSick(); };
   }, []);
 
   const points = data?.points ?? 0;
@@ -59,10 +81,10 @@ export function StreakFlame() {
   const progress = rankProgress(points);
   const toNext = next ? next.min - points : 0;
 
-  // dnešný stav: +1 (zelený deň – modrá), −1 (biely/červený deň – červená), bez jedla → žiadna indikácia
+  // dnešný stav: +1 (zelený), −1 (biely/červený/prázdny), 0 (freeze modrá)
   const todayKey = new Date().toISOString().slice(0, 10);
   const todayKcal = data?.totals.get(todayKey);
-  const todayDelta = todayKcal == null ? 0 : todayKcal > data!.goal - 500 && todayKcal <= data!.goal + 100 ? 1 : -1;
+  const todayDelta = sicknessActive ? 0 : todayKcal == null ? (data?.totals.size ? -1 : 0) : todayKcal > data!.goal - 500 && todayKcal <= data!.goal + 100 ? 1 : -1;
 
   // farba bodov: mínus = červená, nula = biela, viac = zelená
   const pointsCls = points < 0 ? "text-red-500 dark:text-red-400" : points === 0 ? "text-zinc-900 dark:text-white" : "text-emerald-500 dark:text-emerald-400";
@@ -99,13 +121,18 @@ export function StreakFlame() {
           {data?.points ?? "…"}
         </span>
         {todayDelta === 1 && (
-          <motion.span key="plus" initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="text-xs font-black text-blue-500 dark:text-blue-400 leading-none">
+          <motion.span key="plus" initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="text-xs font-black text-emerald-500 leading-none">
             +1
           </motion.span>
         )}
         {todayDelta === -1 && (
           <motion.span key="minus" initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="text-xs font-black text-red-500 dark:text-red-400 leading-none">
             −1
+          </motion.span>
+        )}
+        {sicknessActive && todayDelta === 0 && (
+          <motion.span key="freeze" initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="text-xs font-black text-blue-500 leading-none">
+            0
           </motion.span>
         )}
       </button>
@@ -268,29 +295,37 @@ export function StreakFlame() {
                     {cells.map((c, i) => {
                       if (!c) return <div key={`e-${i}`} />;
                       const kcal = data.totals.get(c.date);
-                      const low = kcal != null && kcal <= data.goal - 500; // biele – low day
+                      const todayKey = new Date().toISOString().slice(0, 10);
+                      const isFreeze = data.sicknesses?.some(s => c.date >= s.startDate && (s.endDate == null || c.date <= s.endDate));
+                      // prázdny deň od prvého jedla = biela -1 (pokiaľ nie je freeze)
+                      const firstDate = Array.from(data.totals.keys()).sort()[0];
+                      const isEmptyPast = kcal == null && c.date < todayKey && firstDate && c.date >= firstDate && !isFreeze;
+                      const low = (kcal != null && kcal <= data.goal - 500) || isEmptyPast; // biele – low day alebo prázdny
                       const ok = kcal != null && kcal > data.goal - 500 && kcal <= data.goal + 100; // zelená – v cieli
                       const over = kcal != null && !low && !ok; // červená – nad cieľom
-                      const isToday = c.date === new Date().toISOString().slice(0, 10);
+                      const isToday = c.date === todayKey;
                       const dow = (new Date(c.date + "T00:00:00").getDay() + 6) % 7; // 0 = Mon
                       const nextCell = cells[i + 1];
                       const nextKcal = nextCell ? data.totals.get(nextCell.date) : undefined;
+                      const isNextFreeze = nextCell ? data.sicknesses?.some(s => nextCell.date >= s.startDate && (s.endDate == null || nextCell.date <= s.endDate)) : false;
                       const nextOk = nextKcal != null && nextKcal > data.goal - 500 && nextKcal <= data.goal + 100;
-                      const connRight = ok && nextOk && dow < 6;
+                      const connRight = ok && nextOk && dow < 6 && !isFreeze && !isNextFreeze;
                       return (
                         <div key={c.date} className="relative aspect-square">
                           {/* connector drawn behind the circles – only within the same week */}
                           {connRight && <span className="absolute left-1/2 top-1/2 -translate-y-1/2 w-full h-[5px] bg-emerald-500 rounded-full" />}
                           <div
-                            title={kcal != null ? `${c.date}: ${kcal} kcal` : c.date}
+                            title={isFreeze ? `${c.date}: freeze (choroba)` : kcal != null ? `${c.date}: ${kcal} kcal` : c.date}
                             className={`absolute inset-[3px] z-10 rounded-full flex items-center justify-center text-[10px] font-bold transition ${
-                              low
-                                ? "bg-white dark:bg-zinc-100 text-zinc-700 border-2 border-zinc-300"
-                                : ok
-                                  ? "bg-emerald-500 text-white"
-                                  : over
-                                    ? "bg-red-500 text-white"
-                                    : "bg-zinc-100 dark:bg-zinc-800 text-zinc-400"
+                              isFreeze
+                                ? "bg-blue-500 text-white"
+                                : low
+                                  ? "bg-white dark:bg-zinc-100 text-zinc-700 border-2 border-zinc-300"
+                                  : ok
+                                    ? "bg-emerald-500 text-white"
+                                    : over
+                                      ? "bg-red-500 text-white"
+                                      : "bg-zinc-100 dark:bg-zinc-800 text-zinc-400"
                             } ${isToday ? "ring-2 ring-blue-500" : ""}`}
                           >
                             {c.day}
@@ -308,6 +343,9 @@ export function StreakFlame() {
                     </span>
                     <span className="flex items-center gap-1">
                       <span className="h-2 w-2 rounded-full bg-red-500 inline-block" /> {t("cal.legendOver")} (≥ {data.goal + 101})
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="h-2 w-2 rounded-full bg-blue-500 inline-block" /> freeze
                     </span>
                   </div>
                 </div>
