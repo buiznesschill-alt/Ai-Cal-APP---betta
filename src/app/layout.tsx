@@ -11,13 +11,13 @@ export const metadata: Metadata = {
   manifest: "/manifest.json",
   appleWebApp: { capable: true, title: "FitCal", statusBarStyle: "default" },
   icons: {
-    // favicon podľa systému, ?v=4 = bypass všetkej starej cache (alpha-aware clean)
+    // favicon podľa systému, ?v=5 = bypass všetkej starej cache (theme pozadie: biele light / čierne dark)
     icon: [
-      { url: "/favicon.ico?v=4", sizes: "any" },
-      { url: "/favicon-light.png?v=4", sizes: "64x64", type: "image/png", media: "(prefers-color-scheme: light)" },
-      { url: "/favicon-dark.png?v=4", sizes: "64x64", type: "image/png", media: "(prefers-color-scheme: dark)" },
+      { url: "/favicon.ico?v=5", sizes: "any" },
+      { url: "/favicon-light.png?v=5", sizes: "64x64", type: "image/png", media: "(prefers-color-scheme: light)" },
+      { url: "/favicon-dark.png?v=5", sizes: "64x64", type: "image/png", media: "(prefers-color-scheme: dark)" },
     ],
-    apple: [{ url: "/apple-touch-icon.png?v=4", sizes: "180x180" }],
+    apple: [{ url: "/apple-touch-icon.png?v=5", sizes: "180x180" }],
   },
 };
 

@@ -10,16 +10,16 @@ export function Header({ username, displayName }: { username?: string; displayNa
   const { resolved } = useTheme();
   const initial = (displayName || username || "P").charAt(0).toUpperCase();
   // cache-bust ?v=4 – nová verzia s alpha-aware resize (žiadny biely halo/fringe)
-  const logoSrc = resolved === "dark" ? "/logo-dark.png?v=4" : "/logo-light.png?v=4";
+  const logoSrc = resolved === "dark" ? "/logo-dark.png?v=5" : "/logo-light.png?v=5";
 
   return (
     <header className="sticky top-0 z-40 bg-zinc-900 dark:bg-zinc-950" suppressHydrationWarning>
       <div className="flex items-center justify-between px-3 sm:px-6 py-2.5 sm:py-3">
         {/* 7 = logo */}
         <Link href="/" className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-          {/* logo podľa theme (light/dark) – rookie obrázok */}
-          <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-xl overflow-hidden bg-transparent flex items-center justify-center">
-            <Image src={logoSrc} alt="FitCal logo" width={40} height={40} className="object-contain" priority />
+          {/* logo podľa theme (light/dark) – klíčok s pozadím podľa režimu appky: biele v light, čierne v dark */}
+          <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-xl overflow-hidden flex items-center justify-center bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 transition-colors">
+            <Image src={logoSrc} alt="FitCal logo" width={40} height={40} className="object-contain p-[2px]" priority />
           </div>
           <span className="font-extrabold text-base sm:text-lg tracking-tight text-white">FitCal</span>
           <span className="text-[10px] sm:text-xs bg-fitcal-mint/20 text-fitcal-mint px-1.5 sm:px-2 py-0.5 rounded-full font-bold">AI</span>
