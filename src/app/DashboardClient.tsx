@@ -540,7 +540,7 @@ export default function DashboardClient({
             </motion.div>
           ) : tab === "tips" ? (
             <motion.div key="tips" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
-              <HealthTipsExpanded />
+              <div data-tour="tips-full"><HealthTipsExpanded /></div>
             </motion.div>
           ) : (
             <motion.div key="history" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
@@ -566,7 +566,7 @@ export default function DashboardClient({
         <ManualMealModal open={showManual} onClose={() => setShowManual(false)} onSaved={refresh} autoMeal={user.autoMeal} />
         <BarcodeScan open={showBarcode} onClose={() => setShowBarcode(false)} onSaved={refresh} autoMeal={user.autoMeal} onManual={() => { setShowBarcode(false); setShowManual(true); }} />
         <PortionEditModal meal={portionMeal} onClose={() => setPortionMeal(null)} onSaved={() => refresh()} />
-        <IntroTour open={introOpen} onClose={closeIntro} />
+        <IntroTour open={introOpen} onClose={closeIntro} onTabChange={(t)=> setTab(t as any)} />
       </main>
     </div>
   );

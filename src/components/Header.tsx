@@ -18,7 +18,7 @@ export function Header({ username, displayName }: { username?: string; displayNa
           <span className="text-[10px] sm:text-xs bg-blue-500 text-white px-1.5 sm:px-2 py-0.5 rounded-full font-black tracking-wider">BETA</span>
         </Link>
 
-        <div className="flex items-center gap-2.5 sm:gap-3">
+        <div className="flex items-center gap-2.5 sm:gap-3" data-tour="rank">
           {/* Beta: Duolingo-style streak flame */}
           <StreakFlame />
 
