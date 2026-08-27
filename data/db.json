@@ -1,0 +1,38 @@
+{
+  "users": [
+    {
+      "id": "1ae6c0c9-5f3e-4a1f-a1a5-996de7585445",
+      "createdAt": "2026-08-21T10:41:06.925Z",
+      "username": "demo2",
+      "displayName": "Demo2",
+      "passwordHash": "$2b$12$FmqY.YpCsrSMR1l8OFQ/6OEGqOXvikEN53plZni50Mu3FmhNj.0nC",
+      "locale": "sk",
+      "goalKcal": 2200,
+      "goalProtein": 120,
+      "goalCarbs": 250,
+      "goalFat": 70,
+      "keepThumbnails": true
+    }
+  ],
+  "meals": [
+    {
+      "id": "c78cd61b-af72-4c20-afed-d4602b74c4fd",
+      "createdAt": "2026-08-21T10:41:08.163Z",
+      "userId": "1ae6c0c9-5f3e-4a1f-a1a5-996de7585445",
+      "date": "2026-08-21",
+      "mealType": "lunch",
+      "dish": "Burger s hranolkami",
+      "description": "Hovädzí burger, syr, hranolky, kečup",
+      "portion_g": 357,
+      "kcal": 755,
+      "protein": 33,
+      "carbs": 69,
+      "fat": 39,
+      "fiber": 4,
+      "sugar": 8,
+      "salt": 2.9,
+      "confidence": 0.84,
+      "thumbnail": "data:image/webp;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII="
+    }
+  ]
+}

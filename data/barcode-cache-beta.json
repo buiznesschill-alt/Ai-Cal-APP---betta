@@ -1,0 +1,172 @@
+{
+  "3017620422003": {
+    "product": {
+      "code": "3017620422003",
+      "barcodeOriginal": "(01)03017620422003(3103)000450",
+      "dish": "Nutella",
+      "description": "Nutella, Ferrero, Yum yum",
+      "portion_g": 100,
+      "pieceG": null,
+      "packageG": null,
+      "pieces": null,
+      "kcal": 539,
+      "protein": 6.3,
+      "carbs": 57.5,
+      "fat": 30.9,
+      "fiber": 0,
+      "sugar": 56.3,
+      "salt": 0.1,
+      "iron": 0,
+      "potassium": 0,
+      "nutrition": true
+    },
+    "profile": {
+      "options": [
+        {
+          "type": "WHOLE_PACKAGE",
+          "labelKey": "q.whole",
+          "gramsPerUnit": 450
+        },
+        {
+          "type": "GRAM",
+          "labelKey": "q.grams",
+          "gramsPerUnit": 1
+        }
+      ],
+      "defaultIndex": 1,
+      "packageType": "BULK",
+      "confidence": 0.55,
+      "kcalPerGram": 5.39,
+      "totalPackageWeight": 450,
+      "packageCount": null,
+      "unitWeight": null,
+      "servingSize": null,
+      "isLiquid": false
+    },
+    "source": "Open Food Facts",
+    "source_url": "https://world.openfoodfacts.org/product/3017620422003",
+    "licence": "ODbL",
+    "barcode_original": "(01)03017620422003(3103)000450",
+    "last_synced_at": "2026-08-25T13:54:33.647Z"
+  },
+  "5449000000996": {
+    "product": {
+      "code": "5449000000996",
+      "barcodeOriginal": "https://id.gs1.org/01/05449000000996?17=261231",
+      "dish": "Coca-Cola",
+      "description": "Coca-Cola • 330 ml",
+      "portion_g": 330,
+      "pieceG": 330,
+      "packageG": 330,
+      "pieces": 1,
+      "kcal": 139,
+      "protein": 0,
+      "carbs": 35,
+      "fat": 0,
+      "fiber": 0,
+      "sugar": 35,
+      "salt": 0,
+      "iron": 0,
+      "potassium": 0,
+      "nutrition": true
+    },
+    "profile": {
+      "options": [
+        {
+          "type": "WHOLE_PACKAGE",
+          "labelKey": "q.whole",
+          "gramsPerUnit": 330
+        },
+        {
+          "type": "SERVING",
+          "labelKey": "q.serving",
+          "gramsPerUnit": 330
+        },
+        {
+          "type": "MILLILITER",
+          "labelKey": "q.ml",
+          "gramsPerUnit": 1
+        }
+      ],
+      "defaultIndex": 0,
+      "packageType": "SINGLE_DRINK",
+      "confidence": 0.9,
+      "kcalPerGram": 0.42,
+      "totalPackageWeight": 330,
+      "packageCount": null,
+      "unitWeight": 330,
+      "servingSize": 330,
+      "isLiquid": true
+    },
+    "source": "Open Food Facts",
+    "source_url": "https://world.openfoodfacts.org/product/5449000000996",
+    "licence": "ODbL",
+    "barcode_original": "https://id.gs1.org/01/05449000000996?17=261231",
+    "last_synced_at": "2026-08-25T13:54:33.744Z"
+  },
+  "9005300010811": {
+    "product": {
+      "code": "9005300010811",
+      "barcodeOriginal": "9005300010811",
+      "dish": "Schokobrötchen",
+      "description": "Ölz • 240g",
+      "portion_g": 100,
+      "pieceG": null,
+      "packageG": 240,
+      "pieces": null,
+      "kcal": 357,
+      "protein": 8.8,
+      "carbs": 55,
+      "fat": 11,
+      "fiber": 0,
+      "sugar": 18,
+      "salt": 0.9,
+      "iron": 0,
+      "potassium": 0,
+      "nutrition": true
+    },
+    "profile": {
+      "options": [
+        {
+          "type": "WHOLE_PACKAGE",
+          "labelKey": "q.whole",
+          "gramsPerUnit": 240
+        },
+        {
+          "type": "PACKAGE_FRACTION",
+          "labelKey": "q.quarter",
+          "gramsPerUnit": 60
+        },
+        {
+          "type": "PACKAGE_FRACTION",
+          "labelKey": "q.half",
+          "gramsPerUnit": 120
+        },
+        {
+          "type": "PACKAGE_FRACTION",
+          "labelKey": "q.threeq",
+          "gramsPerUnit": 180
+        },
+        {
+          "type": "GRAM",
+          "labelKey": "q.grams",
+          "gramsPerUnit": 1
+        }
+      ],
+      "defaultIndex": 0,
+      "packageType": "SINGLE_UNIT",
+      "confidence": 0.6,
+      "kcalPerGram": 3.57,
+      "totalPackageWeight": 240,
+      "packageCount": null,
+      "unitWeight": null,
+      "servingSize": null,
+      "isLiquid": false
+    },
+    "source": "Open Food Facts",
+    "source_url": "https://world.openfoodfacts.org/product/9005300010811",
+    "licence": "ODbL",
+    "barcode_original": "9005300010811",
+    "last_synced_at": "2026-08-25T18:42:29.684Z"
+  }
+}

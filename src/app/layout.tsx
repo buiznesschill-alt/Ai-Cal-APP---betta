@@ -1,0 +1,42 @@
+import type { Metadata, Viewport } from "next";
+import "./globals.css";
+import { I18nProvider } from "@/lib/i18n";
+import { ThemeProvider } from "@/lib/theme";
+import { RefreshReset } from "@/components/RefreshReset";
+import { cookies } from "next/headers";
+
+export const metadata: Metadata = {
+  title: "FitCal Beta – AI Calorie Tracker",
+  description: "YAZIO-like AI calorie tracker – odfot jedlo, spočítam kalórie",
+  manifest: "/manifest.json",
+  appleWebApp: { capable: true, title: "FitCal", statusBarStyle: "default" },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#00C896",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+};
+
+// Sets dark class before first paint (no flash)
+const noFlashScript = `(function(){try{var m=localStorage.getItem('fitcal_theme_mode')||'system';var d=m==='dark'||(m==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);if(d)document.documentElement.classList.add('dark');}catch(e){}})();`;
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const locale = (cookies().get("fitcal_locale")?.value as "sk" | "en") || "sk";
+  return (
+    <html lang={locale} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: noFlashScript }} />
+      </head>
+      <body className="min-h-screen bg-[#F8F9FA] antialiased" suppressHydrationWarning>
+        <I18nProvider initialLocale={locale}>
+          <ThemeProvider>
+            <RefreshReset />
+            {children}
+          </ThemeProvider>
+        </I18nProvider>
+      </body>
+    </html>
+  );
+}
