@@ -11,12 +11,12 @@ export const metadata: Metadata = {
   manifest: "/manifest.json",
   appleWebApp: { capable: true, title: "FitCal", statusBarStyle: "default" },
   icons: {
-    // favicon podľa systému: light -> logo-light.ico via /icon-light.png, dark -> logo-dark.png
+    // favicon podľa systému, ?v=2 = bypass starej cache (predtým biele pozadie)
     icon: [
-      { url: "/favicon-light.png", sizes: "any", type: "image/png", media: "(prefers-color-scheme: light)" },
-      { url: "/favicon-dark.png", sizes: "any", type: "image/png", media: "(prefers-color-scheme: dark)" },
+      { url: "/favicon-light.png?v=2", sizes: "any", type: "image/png", media: "(prefers-color-scheme: light)" },
+      { url: "/favicon-dark.png?v=2", sizes: "any", type: "image/png", media: "(prefers-color-scheme: dark)" },
     ],
-    apple: [{ url: "/icon-192.png", sizes: "180x180" }],
+    apple: [{ url: "/icon-192.png?v=2", sizes: "180x180" }],
   },
 };
 
