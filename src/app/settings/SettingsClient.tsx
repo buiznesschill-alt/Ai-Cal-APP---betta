@@ -52,7 +52,7 @@ function SicknessPanel() {
   return (
     <div className="bg-white dark:bg-zinc-900 rounded-4xl shadow-card border border-zinc-100 dark:border-zinc-800 p-5 sm:p-6 space-y-3">
       <h2 className="font-extrabold flex items-center gap-2">🏥 Choroba / Freeze</h2>
-      <p className="text-xs font-medium text-zinc-500">Počas choroby sa ti nebudú počítať hodnoty ani body (modrá 0), aj keď budeš jesť. Freeze platí od dnes dokým ho nevypneš. -1 od prvého jedla inak.</p>
+      <p className="text-xs font-medium text-zinc-500">Počas choroby sa ti nebudú počítať hodnoty ani body (modrá 0), aj keď budeš jesť. Freeze platí od dnes dokým ho nevypneš.</p>
       {active ? (
         <div className="bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/30 rounded-2xl p-3">
           <p className="text-sm font-bold text-blue-700 dark:text-blue-300">🔵 Aktívna choroba od {active.startDate}</p>

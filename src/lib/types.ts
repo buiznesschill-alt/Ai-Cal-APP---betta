@@ -117,6 +117,16 @@ export interface Sickness {
   createdAt: string;
 }
 
+export interface Supplement {
+  id: string;
+  userId: string;
+  date: string; // YYYY-MM-DD
+  name: string;
+  amount: string; // napr. "1 kapsula", "500 mg"
+  time: string; // "08:00"
+  createdAt: string;
+}
+
 export interface NutritionResult {
   dish: string;
   description: string;

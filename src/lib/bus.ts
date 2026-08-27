@@ -9,6 +9,7 @@ export const BUS = {
   water: "fitcal:water-changed",
   weights: "fitcal:weights-changed",
   sickness: "fitcal:sickness-changed",
+  supplements: "fitcal:supplements-changed",
 } as const;
 
 const CHANNEL_NAME = "fitcal-sync";

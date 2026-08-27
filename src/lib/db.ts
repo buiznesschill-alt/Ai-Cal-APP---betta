@@ -2,7 +2,7 @@ import fs from "fs/promises";
 import path from "path";
 import os from "os";
 import { v4 as uuidv4 } from "uuid";
-import type { User, Meal, Favorite, WaterDay, WeightEntry, DayScore, Sickness } from "./types";
+import type { User, Meal, Favorite, WaterDay, WeightEntry, DayScore, Sickness, Supplement } from "./types";
 import { emitUserEvent } from "./serverEvents";
 
 // Use temp dir to avoid Next.js file watching restart on data changes (space-efficient, not watched)
@@ -19,6 +19,7 @@ type DB = {
   weights?: WeightEntry[];
   dayScores?: DayScore[];
   sicknesses?: Sickness[];
+  supplements?: Supplement[];
 };
 
 let memoryCache: DB | null = null;
@@ -43,10 +44,11 @@ async function readDB(): Promise<DB> {
     if (!parsed.weights) parsed.weights = [];
     if (!parsed.dayScores) parsed.dayScores = [];
     if (!parsed.sicknesses) parsed.sicknesses = [];
+    if (!parsed.supplements) parsed.supplements = [];
     memoryCache = parsed;
     return parsed;
   } catch {
-    const init: DB = { users: [], meals: [], favorites: [], water: [], weights: [], dayScores: [], sicknesses: [] };
+    const init: DB = { users: [], meals: [], favorites: [], water: [], weights: [], dayScores: [], sicknesses: [], supplements: [] };
     memoryCache = init;
     await writeDB(init);
     return init;
@@ -329,6 +331,34 @@ export async function endSickness(userId: string): Promise<Sickness | null> {
   await queuedWrite(db);
   emitUserEvent(userId, "sickness");
   return active;
+}
+
+// Supplements — doplnky stravy
+export async function listSupplements(userId: string, date?: string): Promise<Supplement[]> {
+  const db = await readDB();
+  if (!db.supplements) db.supplements = [];
+  let list = db.supplements.filter((s) => s.userId === userId);
+  if (date) list = list.filter((s) => s.date === date);
+  return list.sort((a,b)=> a.time.localeCompare(b.time));
+}
+export async function addSupplement(userId: string, data: Omit<Supplement, "id" | "userId" | "createdAt">): Promise<Supplement> {
+  const db = await readDB();
+  if (!db.supplements) db.supplements = [];
+  const sup: Supplement = { id: uuidv4(), userId, createdAt: new Date().toISOString(), ...data };
+  db.supplements.push(sup);
+  await queuedWrite(db);
+  emitUserEvent(userId, "supplements" as any);
+  return sup;
+}
+export async function deleteSupplement(userId: string, id: string): Promise<boolean> {
+  const db = await readDB();
+  if (!db.supplements) db.supplements = [];
+  const idx = db.supplements.findIndex((s)=> s.id===id && s.userId===userId);
+  if (idx===-1) return false;
+  db.supplements.splice(idx,1);
+  await queuedWrite(db);
+  emitUserEvent(userId, "supplements" as any);
+  return true;
 }
 
 // Beta: favorites

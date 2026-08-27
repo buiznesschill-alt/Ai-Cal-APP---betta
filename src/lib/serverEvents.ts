@@ -1,6 +1,6 @@
 import { EventEmitter } from "events";
 
-export type ServerEventType = "meals" | "favorites" | "water" | "weights" | "sickness";
+export type ServerEventType = "meals" | "favorites" | "water" | "weights" | "sickness" | "supplements";
 
 // survive Next.js dev hot reloads via globalThis singleton
 const g = globalThis as typeof globalThis & { __fitcalServerEvents?: EventEmitter };

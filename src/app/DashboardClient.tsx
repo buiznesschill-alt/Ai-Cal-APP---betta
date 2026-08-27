@@ -16,6 +16,7 @@ import { WaterCard } from "@/components/WaterCard";
 import { StatsCard } from "@/components/StatsCard";
 import { MonthHeatmap } from "@/components/MonthHeatmap";
 import { PortionEditModal } from "@/components/PortionEdit";
+import { SupplementsTable } from "@/components/SupplementsTable";
 import { useSectionDisplay } from "@/lib/display";
 import { MealTypeIcon } from "@/components/MealTypeIcon";
 import { IntroTour, useIntroAuto } from "@/components/IntroTour";
@@ -508,19 +509,20 @@ export default function DashboardClient({
         <AnimatePresence mode="wait">
           {tab === "today" ? (
             <motion.div key="today" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
-              {/* MOBILE stacked order: 2 scan → 1 goal → favorites → 4 meals → water → stats → 5 chart → 3 tips */}
+              {/* MOBILE stacked order: 2 scan → 1 goal → favorites → 4 meals → water → supps → stats → 5 chart → 3 tips */}
               <div className="sm:hidden space-y-4">
                 <div data-tour="scan"><CameraCapture onResult={handleResult} onManual={() => setShowManual(true)} onBarcode={() => setShowBarcode(true)} autoMeal={user.autoMeal} /></div>
                 <DailyGoalCard compact />
                 <div data-tour="favorites"><FavoritesRow recents={recents} onAdded={refresh} autoMeal={user.autoMeal} /></div>
                 <MealsCard maxHeight="max-h-72" />
                 <div data-tour="water"><WaterCard goalMl={user.goalWaterMl ?? 2000} /></div>
+                <SupplementsTable />
                 <div data-tour="stats"><StatsCard goalKcal={user.goalKcal} /></div>
                 <div data-tour="chart"><DayChart meals={summary.meals} /></div>
                 <div data-tour="tips"><HealthTips onShowAll={() => { setTab("tips"); window.scrollTo(0, 0); }} /></div>
               </div>
 
-              {/* DESKTOP grid: 1 | 2+fav+4 | 3+5+water+stats */}
+              {/* DESKTOP grid: 1 | 2+fav+4 | 3+5+water+supps+stats */}
               <div className="hidden sm:block">
                 <div className={`grid ${todayCols} gap-6 items-start`}>
                   <DailyGoalCard />
@@ -533,6 +535,7 @@ export default function DashboardClient({
                     <div data-tour="tips"><HealthTips onShowAll={() => { setTab("tips"); window.scrollTo(0, 0); }} /></div>
                     <div data-tour="chart"><DayChart meals={summary.meals} /></div>
                     <div data-tour="water"><WaterCard goalMl={user.goalWaterMl ?? 2000} /></div>
+                    <SupplementsTable />
                     <div data-tour="stats"><StatsCard goalKcal={user.goalKcal} /></div>
                   </div>
                 </div>
@@ -548,6 +551,7 @@ export default function DashboardClient({
               <div className="sm:hidden space-y-4">
                 <div data-tour="heatmap"><MonthHeatmap goalKcal={user.goalKcal} /></div>
                 <div data-tour="history"><HistoryList history={history} /></div>
+                <SupplementsTable />
                 <div data-tour="trend"><TrendCharts userId={user.id} /></div>
               </div>
               {/* DESKTOP: meal list | chart side by side, heatmap below */}
@@ -557,6 +561,7 @@ export default function DashboardClient({
                   <div data-tour="trend"><TrendCharts userId={user.id} /></div>
                 </div>
                 <div data-tour="heatmap"><MonthHeatmap goalKcal={user.goalKcal} /></div>
+                <SupplementsTable />
               </div>
             </motion.div>
           )}
